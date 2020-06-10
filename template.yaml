@@ -13,38 +13,74 @@ Resources:
         swagger: '2.0'
         info: {}
         paths:
-          /:
-            get:
+          /webhook-receive:
+            post:
               x-amazon-apigateway-integration:
                 httpMethod: POST
                 type: aws_proxy
-                uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${getWelcomePage.Arn}/invocations
+                uri: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${processWebhook.Arn}/invocations
               responses: {}
       EndpointConfiguration: REGIONAL
-  getWelcomePage:
+  processWebhook:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub ${AWS::StackName}-getWelcomePage
+      FunctionName: !Sub ${AWS::StackName}-processWebhook
       Description: !Sub
-        - Stackery Stack ${StackeryStackTagName} Environment ${StackeryEnvironmentTagName} Function ${ResourceName}
-        - ResourceName: getWelcomePage
-      CodeUri: src/getWelcomePage
+        - Stack ${StackTagName} Environment ${EnvironmentTagName} Function ${ResourceName}
+        - ResourceName: processWebhook
+      CodeUri: src/Function2
       Handler: handler.handler
-      Runtime: python3.7
+      Runtime: python3.8
       MemorySize: 3008
       Timeout: 30
       Tracing: Active
       Policies:
         - AWSXrayWriteOnlyAccess
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CustomerDb
       Events:
-        apiGET:
+        apiPOSTwebhookreceive:
           Type: Api
           Properties:
-            Path: /
-            Method: GET
+            Path: /webhook-receive
+            Method: POST
             RestApiId: !Ref api
-    Metadata:
-      StackeryName: getWelcomePage
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref CustomerDb
+          TABLE_ARN: !GetAtt CustomerDb.Arn
+  registerWebhook:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${AWS::StackName}-registerWebhook
+      Description: !Sub
+        - Stack ${StackTagName} Environment ${EnvironmentTagName} Function ${ResourceName}
+        - ResourceName: registerWebhook
+      CodeUri: src/Function
+      Handler: handler.handler
+      Runtime: python3.8
+      MemorySize: 3008
+      Timeout: 30
+      Tracing: Active
+      Policies:
+        - AWSXrayWriteOnlyAccess
+  registerWebhookDeployTrigger:
+    Type: Custom::FunctionDeployTrigger
+    Properties:
+      ServiceToken: !GetAtt registerWebhook.Arn
+      DeploymentTimestamp: !Ref DeploymentTimestamp
+  CustomerDb:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+        - AttributeName: paypalEmail
+          AttributeType: S
+      BillingMode: PAY_PER_REQUEST
+      KeySchema:
+        - AttributeName: paypalEmail
+          KeyType: HASH
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
 Parameters:
   StackeryStackTagName:
     Type: String
@@ -55,3 +91,12 @@ Parameters:
   StackeryEnvironmentAPIGatewayStageName:
     Type: String
     Description: Environment name used for API Gateway Stage names (injected by Stackery at deployment time)
+  StackTagName:
+    Type: String
+    Description: Stack Name (injected by Stackery at deployment time)
+  EnvironmentTagName:
+    Type: String
+    Description: Environment Name (injected by Stackery at deployment time)
+  DeploymentTimestamp:
+    Type: Number
+    Description: Deployment preparation timestamp in milliseconds Since Epoch (injected by Stackery at deployment time)
