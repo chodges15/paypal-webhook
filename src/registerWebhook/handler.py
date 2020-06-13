@@ -18,16 +18,19 @@ def get_secret(secret_name):
   else:
     return response['SecretString']
 
+def get_default_response(message):
+    # format documented in https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/crpg-ref-responses.html
+    return {
+      "Status" : "FAILED",
+      "Reason" : "unknown",
+      "PhysicalResourceId" : message.PhysicalResourceId,
+      "StackId" : message.StackId,
+      "RequestId" : message.RequestId,
+      "LogicalResourceId" : message.LogicalResourceId,
+  }
 
-def handler(message, context):
-  secretsRegion = os.environ['SECRETS_REGION']
-  status = "error"
-  session = boto3.session.Session()
-  client = session.client(
-      service_name='secretsmanager',
-      region_name=secretsRegion
-  )
-
+def handle_create(response):
+  create_response = response
   paypalrestsdk.configure({
     "mode": "sandbox" if os.environ['SECRETS_NAMESPACE'] == "development" else "live",
     "client_id": get_secret('paypal_client_id'),
@@ -44,12 +47,37 @@ def handler(message, context):
   })
 
   if webhook.create():
-    status = "success"
-    logger.info("Webhook[%s] created successfully" % (webhook.id))
+    create_response.Status = "SUCCESS"
+    logger.info(f"Webhook[{webhook.id}] created successfully")
   else:
+    create_response.Reason = f"Failed to register webhook with paypal: {webhook.error}"
     logger.error(webhook.error)
 
+  return create_response
 
-  return { 
-    'status' : status
-  }
+
+
+def handler(message, context):
+  secretsRegion = os.environ['SECRETS_REGION']
+  session = boto3.session.Session()
+  client = session.client(
+      service_name='secretsmanager',
+      region_name=secretsRegion
+  )
+
+  response = get_default_response(message)
+
+  if message.RequestType == 'Create':
+    logger.info('Create called')
+    response = create_response(response)
+  else if message.RequestType == 'Update':
+    logger.info('Update called')
+    response.status == 'SUCCESS'
+  else if message.RequestType == 'Delete':
+    logger.info('Delete called')
+    response.status == 'SUCCESS'
+  else:
+    logger.error(f"Unexpected RequestType: {message.RequestType}")
+
+
+  return json.dump(response)
