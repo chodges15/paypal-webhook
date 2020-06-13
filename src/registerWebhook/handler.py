@@ -32,16 +32,18 @@ def handler(message, context):
   })
 
   webhook = Webhook({
-    "url": "https://www.yeowza.com/paypal_webhook",
+    "url": os.environ['WEBHOOK_URL'],
     "event_types": [
         {
-            "name": "PAYMENT.AUTHORIZATION.CREATED"
+            "name": "*"
         },
-        {
-            "name": "PAYMENT.AUTHORIZATION.VOIDED"
-        }
     ]
   })
+
+  if webhook.create():
+    print("Webhook[%s] created successfully" % (webhook.id))
+  else:
+    print(webhook.error)
 
 
   return {}

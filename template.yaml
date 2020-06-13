@@ -42,7 +42,15 @@ Resources:
       Policies:
         - AWSXrayWriteOnlyAccess
       Environment:
-        Variables: {}
+        Variables:
+          WEBHOOK_URL: !Join
+            - ''
+            - - http://
+              - !Ref HttpApi
+              - .execute-api.
+              - !Ref AWS::Region
+              - .amazonaws.com/
+              - !Ref Stage
   registerWebhookDeployTrigger:
     Type: Custom::FunctionDeployTrigger
     Properties:
