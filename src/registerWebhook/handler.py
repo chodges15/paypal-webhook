@@ -1,8 +1,11 @@
 import json
 import os
 import boto3
-from botocore.exceptions import ClientError
 import paypalrestsdk
+import logging
+
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
 
 def get_secret(secret_name):
   secrets_namespace = os.environ['SECRETS_NAMESPACE']
@@ -10,15 +13,15 @@ def get_secret(secret_name):
   try:
     response = client.get_secret_value(SecretId=secret_id)
   except ClientError as e:
-    print("Error fetching secret")
-    exit(1)
+    logger.error("Error fetching secret")
+    return ''
   else:
     return response['SecretString']
 
 
 def handler(message, context):
   secretsRegion = os.environ['SECRETS_REGION']
-
+  status = "error"
   session = boto3.session.Session()
   client = session.client(
       service_name='secretsmanager',
@@ -41,9 +44,12 @@ def handler(message, context):
   })
 
   if webhook.create():
-    print("Webhook[%s] created successfully" % (webhook.id))
+    status = "success"
+    logger.info("Webhook[%s] created successfully" % (webhook.id))
   else:
-    print(webhook.error)
+    logger.error(webhook.error)
 
 
-  return {}
+  return { 
+    'status' : status
+  }
