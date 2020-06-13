@@ -32,7 +32,7 @@ def handler(message, context):
   })
 
   webhook = Webhook({
-    "url": os.environ['WEBHOOK_URL'],
+    "url": os.environ['API_URL'], # stackery magic requires this to be connected to HTTP API as resource
     "event_types": [
         {
             "name": "*"
