@@ -31,10 +31,10 @@ def get_default_response(message):
     return {
       "Status" : "FAILED",
       "Reason" : "unknown",
-      "PhysicalResourceId" : message.PhysicalResourceId,
-      "StackId" : message.StackId,
-      "RequestId" : message.RequestId,
-      "LogicalResourceId" : message.LogicalResourceId,
+      "PhysicalResourceId" : message.get("PhysicalResourceId", default = ""),
+      "StackId" : message.get("StackId", default = ""),
+      "RequestId" : message.get("RequestId", default = ""),
+      "LogicalResourceId" : message.get("LogicalResourceId", default="")
   }
 
 def handle_create(response):
@@ -67,6 +67,8 @@ def handle_create(response):
 
 def handler(message, context):
 
+  logger.info(f'Message: {message}')
+  logger.info(f'Context: {context}')
   response = get_default_response(message)
 
   if message.RequestType == 'Create':
