@@ -1,19 +1,27 @@
 import json
 import os
 import boto3
-import paypalrestsdk
+import botocore.exceptions
 import logging
+import json
+import paypalrestsdk
 
+session = boto3.session.Session()
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 def get_secret(secret_name):
+  secretsRegion = os.environ['SECRETS_REGION']
+  client = session.client(
+      service_name='secretsmanager',
+      region_name=secretsRegion
+  )
   secrets_namespace = os.environ['SECRETS_NAMESPACE']
   secret_id = secrets_namespace + secret_name
   try:
     response = client.get_secret_value(SecretId=secret_id)
-  except ClientError as e:
-    logger.error("Error fetching secret")
+  except botocore.exceptions.ClientError as e:
+    logger.error(f"Error fetching secret: {e}")
     return ''
   else:
     return response['SecretString']
@@ -36,9 +44,9 @@ def handle_create(response):
     "client_id": get_secret('paypal_client_id'),
     "client_secret": get_secret('paypal_secret') 
   })
-
-  webhook = Webhook({
-    "url": os.environ['API_URL'], # stackery magic requires this to be connected to HTTP API as resource
+  api_url = os.environ.get('API_URL')
+  webhook = paypalrestsdk.Webhook({
+    "url": api_url, # stackery magic requires this to be connected to HTTP API as resource
     "event_types": [
         {
             "name": "*"
@@ -58,26 +66,20 @@ def handle_create(response):
 
 
 def handler(message, context):
-  secretsRegion = os.environ['SECRETS_REGION']
-  session = boto3.session.Session()
-  client = session.client(
-      service_name='secretsmanager',
-      region_name=secretsRegion
-  )
 
   response = get_default_response(message)
 
   if message.RequestType == 'Create':
     logger.info('Create called')
-    response = create_response(response)
-  else if message.RequestType == 'Update':
+    response = handle_create(response)
+
+  if message.RequestType == 'Update':
     logger.info('Update called')
-    response.status == 'SUCCESS'
-  else if message.RequestType == 'Delete':
+    response['Status'] == 'SUCCESS'
+
+  if message.RequestType == 'Delete':
     logger.info('Delete called')
-    response.status == 'SUCCESS'
-  else:
-    logger.error(f"Unexpected RequestType: {message.RequestType}")
+    response['Status'] == 'SUCCESS'
 
 
-  return json.dump(response)
+  return json.dumps(response)
