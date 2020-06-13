@@ -2,25 +2,6 @@ AWSTemplateFormatVersion: 2010-09-09
 Transform: AWS::Serverless-2016-10-31
 Description: Stackery Serverless API Example Stack
 Resources:
-  api:
-    Type: AWS::Serverless::Api
-    Properties:
-      Name: !Sub
-        - ${ResourceName} From Stackery Stack ${StackeryStackTagName} Environment ${StackeryEnvironmentTagName}
-        - ResourceName: api
-      StageName: !Ref StackeryEnvironmentAPIGatewayStageName
-      DefinitionBody:
-        swagger: '2.0'
-        info: {}
-        paths:
-          /webhook-receive:
-            post:
-              x-amazon-apigateway-integration:
-                httpMethod: POST
-                type: aws_proxy
-                uri: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${processWebhook.Arn}/invocations
-              responses: {}
-      EndpointConfiguration: REGIONAL
   processWebhook:
     Type: AWS::Serverless::Function
     Properties:
@@ -28,7 +9,7 @@ Resources:
       Description: !Sub
         - Stack ${StackTagName} Environment ${EnvironmentTagName} Function ${ResourceName}
         - ResourceName: processWebhook
-      CodeUri: src/Function2
+      CodeUri: src/processWebhook
       Handler: handler.handler
       Runtime: python3.8
       MemorySize: 3008
@@ -36,31 +17,15 @@ Resources:
       Tracing: Active
       Policies:
         - AWSXrayWriteOnlyAccess
-        - DynamoDBCrudPolicy:
-            TableName: !Ref CustomerDb
       Events:
-        apiPOSTwebhookreceive:
-          Type: Api
+        HttpApiPOSTwebhookreceive:
+          Type: HttpApi
           Properties:
             Path: /webhook-receive
             Method: POST
-            RestApiId: !Ref api
-      Environment:
-        Variables:
-          TABLE_NAME: !Ref CustomerDb
-          TABLE_ARN: !GetAtt CustomerDb.Arn
-  CustomerDb:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      AttributeDefinitions:
-        - AttributeName: paypalEmail
-          AttributeType: S
-      BillingMode: PAY_PER_REQUEST
-      KeySchema:
-        - AttributeName: paypalEmail
-          KeyType: HASH
-      StreamSpecification:
-        StreamViewType: NEW_AND_OLD_IMAGES
+            ApiId: !Ref HttpApi
+            PayloadFormatVersion: '2.0'
+            TimeoutInMillis: 29000
   registerWebhook:
     Type: AWS::Serverless::Function
     Properties:
@@ -77,22 +42,25 @@ Resources:
       Policies:
         - AWSXrayWriteOnlyAccess
       Environment:
-        Variables:
-          paypal-client-id: '{{resolve:secretsmanager:${secretName}:SecretString:password}}'
+        Variables: {}
   registerWebhookDeployTrigger:
     Type: Custom::FunctionDeployTrigger
     Properties:
       ServiceToken: !GetAtt registerWebhook.Arn
+  HttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      DefinitionBody:
+        openapi: '3.0'
+        info:
+          title: !Sub ${AWS::StackName}-HttpApi
+          version: '1.0'
+        paths:
+          /webhook-receive:
+            post:
+              responses: {}
+      FailOnWarnings: true
 Parameters:
-  StackeryStackTagName:
-    Type: String
-    Description: Stack Name (injected by Stackery at deployment time)
-  StackeryEnvironmentTagName:
-    Type: String
-    Description: Environment Name (injected by Stackery at deployment time)
-  StackeryEnvironmentAPIGatewayStageName:
-    Type: String
-    Description: Environment name used for API Gateway Stage names (injected by Stackery at deployment time)
   StackTagName:
     Type: String
     Description: Stack Name (injected by Stackery at deployment time)
